@@ -1,0 +1,168 @@
+(function () {
+  // 1. Ensure user is on Foodit Market
+  if (typeof buyPack !== "function" || typeof getCurrentUserData !== "function") {
+    alert("Please run this script on the Foodit Market page!");
+    return;
+  }
+
+  // Remove existing UI if re-run
+  const existing = document.getElementById("foodit-tester-gui");
+  if (existing) existing.remove();
+
+  // Pack data & costs matching Foodit market.txt
+  const packs = [
+    { id: "milk", name: "Milk Box", cost: 30 },
+    { id: "space", name: "Space Box", cost: 30 },
+    { id: "school", name: "School Box", cost: 30 },
+    { id: "donut", name: "Donut Box", cost: 30 },
+    { id: "og", name: "OG Box", cost: 30 },
+    { id: "frog", name: "Frog Box", cost: 30 },
+    { id: "western", name: "Western Box", cost: 30 },
+    { id: "mexican", name: "Mexican Box", cost: 30 },
+    { id: "spooky", name: "Spooky Box", cost: 50 },
+    { id: "thanksgiving", name: "Thanksgiving Box", cost: 50 },
+    { id: "blizzard", name: "Blizzard Box", cost: 50 },
+    { id: "lovely", name: "Love Box", cost: 500 },
+    { id: "lucky", name: "Lucky Box", cost: 500 },
+    { id: "spring", name: "Spring Box", cost: 500 }
+  ];
+
+  // Map box IDs to pack arrays defined on the page
+  const packMap = {
+    milk: typeof milkPack !== "undefined" ? milkPack : [],
+    space: typeof spacePack !== "undefined" ? spacePack : [],
+    school: typeof schoolPack !== "undefined" ? schoolPack : [],
+    donut: typeof donutPack !== "undefined" ? donutPack : [],
+    og: typeof ogPack !== "undefined" ? ogPack : [],
+    frog: typeof frogPack !== "undefined" ? frogPack : [],
+    western: typeof westernPack !== "undefined" ? westernPack : [],
+    mexican: typeof mexicanPack !== "undefined" ? mexicanPack : [],
+    spooky: typeof spookyPack !== "undefined" ? spookyPack : [],
+    thanksgiving: typeof thanksgivingPack !== "undefined" ? thanksgivingPack : [],
+    blizzard: typeof blizzardPack !== "undefined" ? blizzardPack : [],
+    lovely: typeof lovelyPack !== "undefined" ? lovelyPack : [],
+    lucky: typeof luckyPack !== "undefined" ? luckyPack : [],
+    spring: typeof springPack !== "undefined" ? springPack : []
+  };
+
+  // Create Floating Tester UI
+  const gui = document.createElement("div");
+  gui.id = "foodit-tester-gui";
+  gui.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 99999;
+    background: #111111e6;
+    border: 3px solid #db6a00;
+    border-radius: 12px;
+    padding: 16px;
+    width: 280px;
+    color: #fff;
+    font-family: 'Titan One', Arial, sans-serif;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+  `;
+
+  gui.innerHTML = `
+    <div style="display:flex; justify-between; align-items:center; margin-bottom:12px;">
+      <span style="color:#ff9000; font-size:18px;">🛠️ Pack Tester</span>
+      <button id="close-gui-btn" style="background:none; border:none; color:#fff; font-size:16px; cursor:pointer;">✖</button>
+    </div>
+
+    <label style="font-size:12px; color:#aaa; display:block; margin-bottom:4px;">Select Box:</label>
+    <select id="test-pack-select" style="width:100%; padding:8px; border-radius:6px; border:none; background:#222; color:#fff; font-size:14px; margin-bottom:10px;">
+      ${packs.map(p => `<option value="${p.id}">${p.name} (💰 ${p.cost})</option>`).join("")}
+    </select>
+
+    <label style="font-size:12px; color:#aaa; display:block; margin-bottom:4px;">Amount to Open:</label>
+    <input type="number" id="test-pack-amount" value="1" min="1" style="width:93%; padding:8px; border-radius:6px; border:none; background:#222; color:#fff; font-size:14px; margin-bottom:12px;" />
+
+    <div style="display:flex; gap:6px; margin-bottom:10px;">
+      <button id="set-max-btn" style="flex:1; padding:6px; background:#444; border:none; color:#fff; border-radius:6px; cursor:pointer; font-size:12px;">Set Max Affordable</button>
+      <button id="add-tokens-btn" style="flex:1; padding:6px; background:#28a745; border:none; color:#fff; border-radius:6px; cursor:pointer; font-size:12px;">+1,000 Tokens</button>
+    </div>
+
+    <button id="start-open-btn" style="width:100%; padding:10px; background:#db6a00; border:none; color:#fff; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px;">🚀 Open Packs</button>
+    <div id="test-gui-log" style="font-size:12px; color:#ff9000; margin-top:8px; text-align:center; min-height:16px;"></div>
+  `;
+
+  document.body.appendChild(gui);
+
+  // Helper Functions inside Script
+  const getSelectedPack = () => packs.find(p => p.id === document.getElementById("test-pack-select").value);
+  const logMsg = (msg) => { document.getElementById("test-gui-log").textContent = msg; };
+
+  // Button Handlers
+  document.getElementById("close-gui-btn").onclick = () => gui.remove();
+
+  // Add Tokens helper for easy testing
+  document.getElementById("add-tokens-btn").onclick = () => {
+    const current = getTokens();
+    setTokens(current + 1000);
+    logMsg("Added 1,000 Tokens!");
+  };
+
+  // Set max affordable quantity
+  document.getElementById("set-max-btn").onclick = () => {
+    const pack = getSelectedPack();
+    const tokens = getTokens();
+    const maxAffordable = Math.floor(tokens / pack.cost);
+    document.getElementById("test-pack-amount").value = Math.max(1, maxAffordable);
+    logMsg(`Max set to ${maxAffordable}`);
+  };
+
+  // Open Packs Logic
+  document.getElementById("start-open-btn").onclick = () => {
+    const packObj = getSelectedPack();
+    const requestedCount = parseInt(document.getElementById("test-pack-amount").value) || 1;
+    const packArray = packMap[packObj.id];
+
+    if (!packArray || packArray.length === 0) {
+      logMsg("Error: Pack items array empty.");
+      return;
+    }
+
+    let currentTokens = getTokens();
+    const maxCanAfford = Math.floor(currentTokens / packObj.cost);
+
+    if (maxCanAfford <= 0) {
+      logMsg("Not enough tokens!");
+      return;
+    }
+
+    const amountToOpen = Math.min(requestedCount, maxCanAfford);
+    const totalCost = amountToOpen * packObj.cost;
+
+    // Deduct tokens
+    setTokens(currentTokens - totalCost);
+
+    // Open packs rapid bulk calculation
+    const data = getCurrentUserData();
+    let totalCandy = 0;
+    let lastBlook = null;
+
+    for (let i = 0; i < amountToOpen; i++) {
+      const blook = pickBlook(packArray);
+      const candyEarned = candyRewards[blook.rarity] || 1;
+
+      data.packsOpened = (data.packsOpened || 0) + 1;
+      data.candy = (Number(data.candy) || 0) + candyEarned;
+      data.blooks.push(blook);
+
+      totalCandy += candyEarned;
+      lastBlook = blook;
+    }
+
+    // Save state & update UI
+    saveCurrentUserData(data);
+    updateCandyDisplay();
+
+    // Trigger visual popup for the last pulled item to give feedback
+    if (lastBlook) {
+      showBlook(lastBlook, totalCandy, packObj.id);
+    }
+
+    logMsg(`Opened ${amountToOpen}x ${packObj.name}! (+${totalCandy} 🍬)`);
+  };
+})();
