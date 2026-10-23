@@ -1,0 +1,150 @@
+(function () {
+  // 1. Ensure user is on Foodit Foods page
+  if (typeof getUser !== "function" || typeof saveUser !== "function") {
+    alert("Please run this script on the Foodit Foods page!");
+    return;
+  }
+
+  // Remove existing UI if re-run
+  const existing = document.getElementById("foodit-autosell-gui");
+  if (existing) existing.remove();
+
+  // Create Floating Auto-Sell GUI
+  const gui = document.createElement("div");
+  gui.id = "foodit-autosell-gui";
+  gui.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 99999;
+    background: #111111e6;
+    border: 3px solid #d32f2f;
+    border-radius: 12px;
+    padding: 16px;
+    width: 290px;
+    color: #fff;
+    font-family: 'Titan One', Arial, sans-serif;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+  `;
+
+  gui.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <span style="color:#ff5252; font-size:18px;">⚡ Auto-Sell Panel</span>
+      <button id="close-autosell-btn" style="background:none; border:none; color:#fff; font-size:16px; cursor:pointer;">✖</button>
+    </div>
+
+    <label style="font-size:12px; color:#aaa; display:block; margin-bottom:4px;">Target Selection:</label>
+    <select id="autosell-mode" style="width:100%; padding:8px; border-radius:6px; border:none; background:#222; color:#fff; font-size:14px; margin-bottom:10px;">
+      <option value="duplicates">Sell All Duplicates (Keep 1 of each)</option>
+      <option value="rarity">Sell by Max Rarity Threshold</option>
+      <option value="everything">Sell EVERYTHING (Clear All Inventory)</option>
+    </select>
+
+    <div id="rarity-container" style="display:none; margin-bottom:10px;">
+      <label style="font-size:12px; color:#aaa; display:block; margin-bottom:4px;">Sell Up To Rarity:</label>
+      <select id="autosell-rarity" style="width:100%; padding:8px; border-radius:6px; border:none; background:#222; color:#fff; font-size:14px;">
+        <option value="uncommon">Uncommon (Tokens: 5)</option>
+        <option value="rare">Rare & Below (Tokens: 20)</option>
+        <option value="epic">Epic & Below (Tokens: 75)</option>
+        <option value="legendary">Legendary & Below (Tokens: 200)</option>
+      </select>
+    </div>
+
+    <button id="execute-autosell-btn" style="width:100%; padding:10px; background:#d32f2f; border:none; color:#fff; border-radius:8px; font-weight:bold; cursor:pointer; font-size:15px; margin-top:4px;">🔥 Run Auto-Sell</button>
+    <div id="autosell-log" style="font-size:12px; color:#ff9000; margin-top:8px; text-align:center; min-height:16px;"></div>
+  `;
+
+  document.body.appendChild(gui);
+
+  // Helper log message
+  const logMsg = (msg) => { document.getElementById("autosell-log").textContent = msg; };
+
+  // Handle mode change visibility
+  document.getElementById("autosell-mode").onchange = (e) => {
+    const rarityCont = document.getElementById("rarity-container");
+    rarityCont.style.display = e.target.value === "rarity" ? "block" : "none";
+  };
+
+  // Close GUI button
+  document.getElementById("close-autosell-btn").onclick = () => gui.remove();
+
+  // Rarity rank hierarchy setup for threshold filtering
+  const rarityRanks = {
+    uncommon: 1,
+    rare: 2,
+    epic: 3,
+    legendary: 4,
+    chroma: 5,
+    unique: 6,
+    mystical: 7,
+    heavenly: 8
+  };
+
+  // Execution Logic
+  document.getElementById("execute-autosell-btn").onclick = () => {
+    const user = getUser();
+    if (!user || !user.blooks || user.blooks.length === 0) {
+      logMsg("Inventory is empty!");
+      return;
+    }
+
+    const mode = document.getElementById("autosell-mode").value;
+    const targetRarity = document.getElementById("autosell-rarity").value;
+    const targetRank = rarityRanks[targetRarity] || 1;
+
+    let itemsToSell = [];
+    let retainedItems = [];
+
+    if (mode === "everything") {
+      itemsToSell = [...user.blooks];
+      retainedItems = [];
+    } 
+    else if (mode === "duplicates") {
+      const seenNames = new Set();
+      user.blooks.forEach(item => {
+        if (!seenNames.has(item.name)) {
+          seenNames.add(item.name);
+          retainedItems.push(item); // Keep the first copy
+        } else {
+          itemsToSell.push(item);   // Sell all extras/duplicates
+        }
+      });
+    } 
+    else if (mode === "rarity") {
+      user.blooks.forEach(item => {
+        const itemRarity = (item.rarity || "uncommon").toLowerCase();
+        const itemRank = rarityRanks[itemRarity] || 1;
+
+        if (itemRank <= targetRank) {
+          itemsToSell.push(item);
+        } else {
+          retainedItems.push(item);
+        }
+      });
+    }
+
+    if (itemsToSell.length === 0) {
+      logMsg("No items match the criteria to sell.");
+      return;
+    }
+
+    // Calculate total token payout using native getPrice logic
+    let totalPayout = 0;
+    itemsToSell.forEach(item => {
+      totalPayout += getPrice(item.rarity || "uncommon");
+    });
+
+    // Update user inventory and token balance
+    user.blooks = retainedItems;
+    user.tokens = (user.tokens || 0) + totalPayout;
+    saveUser(user);
+
+    // Refresh display grid using your page's native function
+    if (typeof showBlooks === "function") {
+      showBlooks(document.getElementById("blook-search") ? document.getElementById("blook-search").value : "");
+    }
+
+    logMsg(`Sold ${itemsToSell.length} items for 💰 ${totalPayout} Tokens!`);
+  };
+})();
